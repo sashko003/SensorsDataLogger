@@ -25,10 +25,13 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <string.h>
+#include "data_logger.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+
+
 typedef union data_log_s
 {
 	struct data_s
@@ -40,31 +43,12 @@ typedef union data_log_s
 	uint8_t bBuffer[16];
 } DATA_LOG_S;
 
-typedef union log_header_s
-{
-	struct header_s
-	{
-		uint32_t u32RowsNumber;
-		uint8_t u8PageNumber;
-		uint32_t u32PlaceAvailable;
-		uint32_t u32LogSize;
-	} HEADER_S;
 
-	uint8_t bBuffer[16];
-
-	uint8_t *pFlashPointer;
-} LOG_HEADER_S;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-__attribute__((__section__(".log_data"))) const uint8_t LOG_DATA[1];
-#define FLASH_STORAGE LOG_DATA
-#define PAGE_SIZE 0x800
-#define LOGS_BEGIN FLASH_STORAGE + 0x10
-#define LOGGER_DATA FLASH_STORAGE
-#define MAX_PAGES  (3U)
-#define MIRROR_PAGE (FLASH_STORAGE + MAX_PAGES*PAGE_SIZE)
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -98,7 +82,7 @@ const osThreadAttr_t PotentiometerDa_attributes = {
   .stack_size = 128 * 4
 };
 /* USER CODE BEGIN PV */
-static LOG_HEADER_S LogHeaderS = {0};
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -386,89 +370,9 @@ uint32_t used_mem(uint32_t address)
 #define FLASH_KEY1               ((uint32_t)0x45670123)
 #define FLASH_KEY2               ((uint32_t)0xCDEF89AB)
 ///////////////////////////////////////////////////////
-void LoggerInit(void)
-{
-	memcpy(LogHeaderS.bBuffer, (uint8_t*)LOGGER_DATA, sizeof(LOG_HEADER_S));
-	uint64_t test1 = *(uint64_t*)LogHeaderS.bBuffer;
-	uint64_t test2 = *(uint64_t*)(LogHeaderS.bBuffer+8);
-//	if(0xFFFFFFFFFFFFFFFF == *(uint64_t*)LogHeaderS.bBuffer &&
-//	   0xFFFFFFFFFFFFFFFF == *(uint64_t*)(LogHeaderS.bBuffer+8))
-	{
-	    memset(LogHeaderS.bBuffer, 0, sizeof(LOG_HEADER_S));
-	    HAL_FLASH_Unlock(); HAL_FLASH_OB_Unlock();
-	    for(int i = 0; i<sizeof(LOG_HEADER_S); i+=4)
-	    {
-	    	flash_write(LOGGER_DATA+i, 0);
-	    }
-	    HAL_FLASH_Lock(); HAL_FLASH_OB_Lock();
-	}
-}
 
-void LoggerUpdate(uint8_t *pLogger)
-{
-	uint8_t test[16] = {0};
-	uint32_t size = sizeof(LOG_HEADER_S);
-	HAL_FLASH_Unlock(); HAL_FLASH_OB_Unlock();
-    for(int i = 0; i<sizeof(LOG_HEADER_S); i+=4)
-    {
-    	flash_write(LOGGER_DATA+i, 0xFFFF);
-    }
-	for(int i = 0; i<sizeof(LOG_HEADER_S); i+=4)
-    {
-	    flash_write(LOGGER_DATA+i, *(uint32_t*)(pLogger+i));
-	    //pLogger += 4;
-	}
-	memcpy(&test, (void*)(LOGGER_DATA), 16);
-	HAL_FLASH_Lock(); HAL_FLASH_OB_Lock();
-}
 
-void LogData(uint8_t* pData, uint32_t size)
-{
-	if(LogHeaderS.HEADER_S.u32LogSize+size >= PAGE_SIZE)
-	{
-		LogHeaderS.HEADER_S.u8PageNumber += 1;
 
-		if(MAX_PAGES == LogHeaderS.HEADER_S.u8PageNumber)
-		{
-			LogHeaderS.HEADER_S.u8PageNumber = 0;
-		}
-		uint32_t page_adr = FLASH_STORAGE + PAGE_SIZE*LogHeaderS.HEADER_S.u8PageNumber;
-		if(0xFF == define_page(page_adr))
-		{
-			for(int i = 0; i<size; i+=4)
-			{
-				flash_write(page_adr + i, 0);
-			}
-		}
-		else
-		{
-			flash_erase(MIRROR_PAGE);
-			flash_copy_page(page_adr, MIRROR_PAGE);
-			flash_erase(page_adr);
-		}
-		LogHeaderS.HEADER_S.u32LogSize = 0;
-	}
-	HAL_FLASH_Unlock(); HAL_FLASH_OB_Unlock();
-
-	if(0 == size%4)
-	{
-		uint32_t curr_adr = LOGS_BEGIN+(LogHeaderS.HEADER_S.u8PageNumber*PAGE_SIZE)+LogHeaderS.HEADER_S.u32LogSize;
-		for(int i = 0; i<size; i+=4)
-		{
-			flash_write(curr_adr+i, *(uint32_t*)(pData+i));
-		}
-	}
-//	else
-//	{
-//		for(int i = 0; i<size-1; i+=2)
-//		{
-//			flash_write(FLASH_STORAGE+LogHeaderS.HEADER_S.u32LogSize+i, *(uint16_t*)pData);
-//		}
-//		flash_write(FLASH_STORAGE+LogHeaderS.HEADER_S.u32LogSize+i, *(uint16_t*)pData);
-//	}
-	LogHeaderS.HEADER_S.u32LogSize += size;
-	HAL_FLASH_Lock(); HAL_FLASH_OB_Lock();
-}
 
 uint8_t flash_ready(void) {
 	return !(FLASH->SR & FLASH_SR_BSY);
@@ -517,7 +421,7 @@ void flash_write(uint32_t address,uint32_t data)
     *(__IO uint16_t*)address = test;
     test = *(__IO uint16_t*)address;
     *(uint16_t*)chTest = *(__IO uint16_t*)address;
-	memcpy((__IO uint16_t*)address, (uint16_t*)&data, 2);
+	//memcpy((__IO uint16_t*)address, (uint16_t*)&data, 2);
 	while(!flash_ready())
 		;
 	address+=2;
@@ -574,29 +478,7 @@ uint32_t flash_copy_page(uint32_t src, uint32_t dst)
     return HAL_OK;
 }
 
-uint8_t define_page(uint32_t address)
-{
-	uint8_t pageHeader[16] = {0};
-	uint8_t pageState = 1;
-	HAL_FLASH_Lock(); HAL_FLASH_OB_Lock();
-	memcpy(pageHeader, (uint8_t*)address, 16);
-	if(0 == (uint64_t*)pageHeader[0] &&
-	   0 == (uint64_t*)pageHeader[1])
-	{
-		pageState = 0;
-	}
-	else if(0xFFFFFFFFFFFFFFFF == (uint64_t*)pageHeader[0] &&
-			0xFFFFFFFFFFFFFFFF == (uint64_t*)pageHeader[1])
-	{
-		pageState = 0xFF;
-	}
-	else
-	{
-		pageState = 1;
-	}
-	HAL_FLASH_Unlock(); HAL_FLASH_OB_Unlock();
-	return pageState;
-}
+
 /* USER CODE END 0 */
 
 /**
@@ -1172,7 +1054,7 @@ void StartDefaultTask(void *argument)
 //	  LogHeaderS.HEADER_S.u32LogSize += 16;
 //	  HAL_FLASH_Lock(); HAL_FLASH_OB_Lock();
 
-	  LoggerUpdate((uint8_t*)&LogHeaderS);
+	  LoggerUpdate(UPDATED);
 	  LOG_HEADER_S TestHeaders_S = {0};
 	  memcpy(TestHeaders_S.bBuffer, LOGGER_DATA, 16);
 //	  save_to_flash((uint8_t*)&HumidityData_S);//, sizeof(DATA_LOG_S));
@@ -1181,7 +1063,7 @@ void StartDefaultTask(void *argument)
 	  memset(HumidityData_S.DATA_S.bDataBuffer, 0, sizeof(uint32_t)+8);
 	  memset(TemperatureData_S.DATA_S.bDataBuffer, 0, sizeof(uint32_t)+8);
 	  //memcpy(Test_S.bBuffer, LOGS_BEGIN+LogHeaderS.HEADER_S.u32LogSize+u32Offset-32, 16);
-      memcpy(Test_S.bBuffer, LOGS_BEGIN+LogHeaderS.HEADER_S.u32LogSize-16, 16);
+      //memcpy(Test_S.bBuffer, LOGS_BEGIN+LogHeaderS.HEADER_S.u32LogSize-16, 16);
 	  u8Presence = 0;
 	  memset(chMsg, 0, 20);
 	  uint64_t f = 0.0;

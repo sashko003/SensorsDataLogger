@@ -1,0 +1,5 @@
+data_logger.c:10:6:LoggerInit	16	static
+data_logger.c:54:6:LoggerUpdate	40	static
+data_logger.c:79:6:LogData	32	static
+data_logger.c:138:17:find_last_record	16	static
+data_logger.c:152:16:define_page	48	static
