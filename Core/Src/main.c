@@ -130,7 +130,7 @@ void set_time (void)
   memcpy(chMinutes, chTime+3, 2);
   memcpy(chSeconds, chTime+6, 2);
 
-  sTime.Hours = atoi(chHours); // set hours
+  sTime.Hours = (atoi(chHours) > 12) ? atoi(chHours) - 12 : atoi(chHours); // set hours
   sTime.Minutes = atoi(chMinutes); // set minutes
   sTime.Seconds = atoi(chSeconds); // set seconds
   sTime.DayLightSaving = RTC_DAYLIGHTSAVING_NONE;
@@ -140,14 +140,15 @@ void set_time (void)
     //_Error_Handler(__FILE__, __LINE__);
 	  return;
   }
-//  sDate.WeekDay = RTC_WEEKDAY_THURSDAY; //  day
-//  sDate.Month = RTC_MONTH_AUGUST; // month
-//  sDate.Date = 0x9; // date
-//  sDate.Year = 0x18; // year
-//  if (HAL_RTC_SetDate(&hrtc, &sDate, RTC_FORMAT_BCD) != HAL_OK)
-//  {
-//    _Error_Handler(__FILE__, __LINE__);
-//  }
+  sDate.WeekDay = RTC_WEEKDAY_TUESDAY; //  day
+  sDate.Month = RTC_MONTH_MAY; // month
+  sDate.Date = 0x5; // date
+  sDate.Year = 0x16; // year
+  if (HAL_RTC_SetDate(&hrtc, &sDate, RTC_FORMAT_BCD) != HAL_OK)
+  {
+    //_Error_Handler(__FILE__, __LINE__);
+	  return;
+  }
   HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR1, 0x32F2); // backup register
 }
 
@@ -174,7 +175,7 @@ float fHumidity = 0.0;
 uint8_t u8RhByte1 = 0, u8RhByte2 = 0, u8Temp1 = 0, u8Temp2 = 0;
 uint16_t u16CheckSum = 0, u16RH = 0, u16Temp = 0;
 uint8_t u8Presence = 0;
-
+uint32_t g_TicksToDelay = 0;
 void set_Pin_Output(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin)
 {
 	GPIO_InitTypeDef GPIO_Init_S = {0};
@@ -993,7 +994,7 @@ void StartDefaultTask(void *argument)
 	memcpy(HumidityData_S.DATA_S.sDataType,
 		   "HMD",
 		   3);
-
+  TickType_t xLastWakeTime;
   /* Infinite loop */
   for(;;)
   {
@@ -1033,6 +1034,8 @@ void StartDefaultTask(void *argument)
 	  OS_Tick_Disable();
 	  LogData(TemperatureData_S.bBuffer, sizeof(DATA_LOG_S));
 	  LogData(HumidityData_S.bBuffer, sizeof(DATA_LOG_S));
+	  // Initialise the xLastWakeTime variable with the current time.
+	  xLastWakeTime = xTaskGetTickCount();
 	  //LogData(LogHeaderS.bBuffer, sizeof(LOG_HEADER_S));
 //	  HAL_FLASH_Unlock(); HAL_FLASH_OB_Unlock();
 //	  int i = 0;
@@ -1075,11 +1078,13 @@ void StartDefaultTask(void *argument)
 	  	    u16CheckSum += chData[i];
 	  	}
 	  	sprintf(chMsg, "Data%d: %d\n\r", i, f);
-	  	HAL_UART_Transmit(&huart2, chMsg, strlen(chMsg), HAL_MAX_DELAY);
+	  	//HAL_UART_Transmit(&huart2, chMsg, strlen(chMsg), HAL_MAX_DELAY);
 	  }
 	  HAL_UART_Transmit(&huart2, TemperatureData_S.DATA_S.sTimestamp, 8, HAL_MAX_DELAY);
 	  sprintf(chMsg, "CHECK_SUM: %d\n\r", ((uint8_t*)&u16CheckSum)[0]);
 	  HAL_UART_Transmit(&huart2, chMsg, strlen(chMsg), HAL_MAX_DELAY);
+	  vTaskDelayUntil( &xLastWakeTime, 8500);
+	  //vTaskDelay(g_TicksToDelay*1000/portTICK_PERIOD_MS);
 	  //HAL_Delay(500);
   }
   /* USER CODE END 5 */ 
@@ -1099,6 +1104,7 @@ void readPotentiometerData(void *argument)
 	//uint8_t u8Buffer[0x800] = {0};
 	uint32_t uiValue = 0;
 	DATA_LOG_S PotentiometerData_S = {0};
+	TickType_t xLastWakeTime;
   /* Infinite loop */
   for(;;)
   {
@@ -1106,22 +1112,25 @@ void readPotentiometerData(void *argument)
 	  HAL_ADC_Start(&hadc1);
 	  HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
 	  uiValue = HAL_ADC_GetValue(&hadc1);
-//	  memcpy(PotentiometerData_S.sTimestamp,
-//			 __TIME__,
-//			 8);
-//	  memcpy(PotentiometerData_S.sDataType,
-//			 "PTM",
-//			 3);
-//	  memcpy(PotentiometerData_S.bDataBuffer,
-//			 (char*)(&uiValue),
-//			 sizeof(uint32_t));
-//	  OS_Tick_Disable();
-//	  save_to_flash((uint8_t*)&PotentiometerData_S, sizeof(DATA_LOG_S));
-//	  OS_Tick_Enable();
+	  g_TicksToDelay = uiValue/1000+1;
+	  memcpy(PotentiometerData_S.DATA_S.sTimestamp,
+			 __TIME__,
+			 8);
+	  memcpy(PotentiometerData_S.DATA_S.sDataType,
+			 "PTM",
+			 3);
+	  memcpy(PotentiometerData_S.DATA_S.bDataBuffer,
+			 (char*)(&uiValue),
+			 sizeof(uint32_t));
+	  OS_Tick_Disable();
+	  LogData(PotentiometerData_S.bBuffer, sizeof(DATA_LOG_S));
+	  //save_to_flash((uint8_t*)&PotentiometerData_S, sizeof(DATA_LOG_S));
+	  OS_Tick_Enable();
 	  //read_flash(u8Buffer);
-	  sprintf(chMsg, "%u\n\r", uiValue);
+	  sprintf(chMsg, "DELAY: %u\n\r", g_TicksToDelay);
 	  HAL_UART_Transmit(&huart2, chMsg, strlen(chMsg), HAL_MAX_DELAY);
-	  //HAL_Delay(500);
+	  //vTaskDelay(g_TicksToDelay);
+	  HAL_Delay(g_TicksToDelay*100);
     //osDelay(500);
   }
   /* USER CODE END readPotentiometerData */
