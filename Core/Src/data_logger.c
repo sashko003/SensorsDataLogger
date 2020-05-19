@@ -105,8 +105,8 @@ void LogData(uint8_t* pData, uint32_t size)
 		}
 		else
 		{
-			flash_erase(MIRROR_PAGE);
-			flash_copy_page(page_adr, MIRROR_PAGE);
+			//flash_erase(MIRROR_PAGE);
+			//flash_copy_page(page_adr, MIRROR_PAGE);
 			flash_erase(page_adr);
 		}
 		LogHeaderS.HEADER_S.u32LogSize = 0;
