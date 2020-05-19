@@ -300,7 +300,7 @@ void save_to_flash(uint8_t *data)//, uint32_t data_length)
 	volatile uint16_t pages = ((16)/PAGE_SIZE)
 									+ (int)((16%PAGE_SIZE) != 0);
 	  /* Unlock the Flash to enable the flash control register access *************/
-	  HAL_HAL_FLASH_Unlock(); HAL_FLASH_OB_Unlock();
+	  HAL_FLASH_Unlock(); HAL_FLASH_OB_Unlock();
 
 	  /* Allow Access to option bytes sector */
 	  //HAL_FLASH_OB_Unlock();
@@ -527,7 +527,7 @@ int main(void)
   flash_erase(MIRROR_PAGE);
   LoggerInit();
   set_time();
-
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, SET);
 //  HAL_HAL_FLASH_Unlock(); HAL_FLASH_OB_Unlock();
 //  uint32_t test = 0;
 //  for(int i = 0; i < 10; ++i)
@@ -957,10 +957,10 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0|GPIO_PIN_1, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : PA1 */
-  GPIO_InitStruct.Pin = GPIO_PIN_1;
+  /*Configure GPIO pins : PA0 PA1 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -1130,7 +1130,7 @@ void readPotentiometerData(void *argument)
 	  sprintf(chMsg, "DELAY: %u\n\r", g_TicksToDelay);
 	  HAL_UART_Transmit(&huart2, chMsg, strlen(chMsg), HAL_MAX_DELAY);
 	  //vTaskDelay(g_TicksToDelay);
-	  HAL_Delay(g_TicksToDelay*100);
+	  HAL_Delay(g_TicksToDelay*1000);
     //osDelay(500);
   }
   /* USER CODE END readPotentiometerData */
