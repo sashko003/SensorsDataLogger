@@ -1,4 +1,5 @@
 #include "data_logger.h"
+#include "flash_driver.h"
 
 static LOG_HEADER_S LogHeaderS = {0};
 static LOGGER_DATA_S LoggerS = {0};

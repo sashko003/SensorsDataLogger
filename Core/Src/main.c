@@ -26,6 +26,7 @@
 /* USER CODE BEGIN Includes */
 #include <string.h>
 #include "data_logger.h"
+#include "dht11_driver.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -58,13 +59,11 @@ typedef union data_log_s
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
-ADC_HandleTypeDef hadc2;
 
 RTC_HandleTypeDef hrtc;
 
 TIM_HandleTypeDef htim2;
 
-UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 
 /* Definitions for readDHT11Data */
@@ -88,11 +87,9 @@ const osThreadAttr_t PotentiometerDa_attributes = {
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_USART1_UART_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_ADC1_Init(void);
-static void MX_ADC2_Init(void);
 static void MX_RTC_Init(void);
 void StartDefaultTask(void *argument);
 void readPotentiometerData(void *argument);
@@ -108,15 +105,7 @@ uint8_t define_page(uint32_t address);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void delay_us(uint16_t us)
-{
-	__HAL_TIM_SET_COUNTER(&htim2, 0); // set counter value to 0
-	uint32_t i = __HAL_TIM_GET_COUNTER(&htim2);
-	while(__HAL_TIM_GET_COUNTER(&htim2) < us){
-		;//i = __HAL_TIM_GET_COUNTER(&htim2);
-	}
-	// wait for the counter to reach the us input in the parameter
-}
+
 
 void set_time (void)
 {
@@ -169,104 +158,13 @@ void get_time(char* time)
 /* Display date Format: dd-mm-yy */
  //sprintf((char*)date,"%02d-%02d-%2d",gDate.Date, gDate.Month, 2000 + gDate.Year);
 }
-/*****************************___DHT11___*****************************/
-float fTemperature = 0.0;
-float fHumidity = 0.0;
-uint8_t u8RhByte1 = 0, u8RhByte2 = 0, u8Temp1 = 0, u8Temp2 = 0;
-uint16_t u16CheckSum = 0, u16RH = 0, u16Temp = 0;
-uint8_t u8Presence = 0;
+
+
 uint32_t g_TicksToDelay = 0;
-void set_Pin_Output(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin)
-{
-	GPIO_InitTypeDef GPIO_Init_S = {0};
-	GPIO_Init_S.Pin = GPIO_Pin;
-	GPIO_Init_S.Mode = GPIO_MODE_OUTPUT_PP;
-	GPIO_Init_S.Speed = GPIO_SPEED_FREQ_LOW;
-	HAL_GPIO_Init(GPIOx, &GPIO_Init_S);
-}
+uint8_t u8Presence = 0;
 
-void set_Pin_Input(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin)
-{
-	GPIO_InitTypeDef GPIO_Init_S = {0};
-	GPIO_Init_S.Pin = GPIO_Pin;
-	GPIO_Init_S.Mode = GPIO_MODE_INPUT;
-	GPIO_Init_S.Pull = GPIO_NOPULL;
-	HAL_GPIO_Init(GPIOx, &GPIO_Init_S);
-}
 
-#define DHT11_GPIO GPIOA
-#define DHT11_PIN  GPIO_PIN_1
 
-void DHT11_Start(void)
-{
-	set_Pin_Output(DHT11_GPIO, DHT11_PIN);
-	HAL_GPIO_WritePin(DHT11_GPIO, DHT11_PIN, RESET);
-	HAL_Delay(18);
-	HAL_GPIO_WritePin(DHT11_GPIO, DHT11_PIN, SET);
-	delay_us(30);
-	set_Pin_Input(DHT11_GPIO, DHT11_PIN);
-}
-
-uint8_t DHT11_Check_Response(void)
-{
-	uint8_t u8Response = 0;
-	delay_us(40);
-	if(!HAL_GPIO_ReadPin(DHT11_GPIO, DHT11_PIN))
-	{
-		delay_us(80);
-		if(HAL_GPIO_ReadPin(DHT11_GPIO, DHT11_PIN))
-		{
-			u8Response = 1;
-		}
-		else
-		{
-			u8Response = -1;
-		}
-	}
-
-	int k = 0;
-	uint32_t start = __HAL_TIM_GET_COUNTER(&htim2);
-	while(HAL_GPIO_ReadPin(DHT11_GPIO, DHT11_PIN))
-	{;
-	    if(__HAL_TIM_GET_COUNTER(&htim2)-start > 50000)
-	    {
-	    	break;
-	    }
-	}
-
-	return u8Response;
-}
-
-uint8_t DHT11_Read(void)
-{
-	uint8_t i = 0, j;
-	for(j = 0; j<8; ++j)
-	{
-		int k = 0;
-		while(!HAL_GPIO_ReadPin(DHT11_GPIO, DHT11_PIN))
-		{;
-			k++;
-		}
-		delay_us(30);
-		if(!HAL_GPIO_ReadPin(DHT11_GPIO, DHT11_PIN))
-		{
-			i &= ~(1<<(7-j));
-		}
-		else
-		{
-		    i |= (1<<(7-j));
-		}
-		uint32_t start = __HAL_TIM_GET_COUNTER(&htim2);
-		while(HAL_GPIO_ReadPin(DHT11_GPIO, DHT11_PIN))
-		{;
-		    if(__HAL_TIM_GET_COUNTER(&htim2)-start > 50000)
-			{
-			  	break;
-			}
-		}
-	}
-	return i;
-}
 uint8_t PendST = 0;
 int32_t  OS_Tick_Enable (void) {
   if (PendST != 0U) {
@@ -286,198 +184,7 @@ int32_t  OS_Tick_Disable (void) {
   return (0);
 }
 
-void save_to_flash(uint8_t *data)//, uint32_t data_length)
-{
-	static uint32_t u32Offset = 0;
-	uint32_t curr_size = used_mem(FLASH_STORAGE);
-	uint32_t *data_to_FLASH = (uint32_t *)malloc(curr_size+16);
-	memset((uint8_t*)data_to_FLASH, 0, curr_size+16);
-	memcpy((uint8_t*)data_to_FLASH, (uint8_t*)FLASH_STORAGE, curr_size);
-	memcpy((uint8_t*)data_to_FLASH+curr_size, (uint8_t*)(FLASH_STORAGE+curr_size), 16);
 
-	volatile uint32_t data_length = ((16) / 4)
-									+ (int)((16 % 4) != 0);
-	volatile uint16_t pages = ((16)/PAGE_SIZE)
-									+ (int)((16%PAGE_SIZE) != 0);
-	  /* Unlock the Flash to enable the flash control register access *************/
-	  HAL_FLASH_Unlock(); HAL_FLASH_OB_Unlock();
-
-	  /* Allow Access to option bytes sector */
-	  //HAL_FLASH_OB_Unlock();
-
-	  /* Fill EraseInit structure*/
-	  FLASH_EraseInitTypeDef EraseInitStruct;
-	  EraseInitStruct.TypeErase = FLASH_TYPEERASE_PAGES;
-	  EraseInitStruct.PageAddress = FLASH_STORAGE + u32Offset;
-	  EraseInitStruct.NbPages = pages;
-	  uint32_t PageError;
-
-	  volatile uint32_t write_cnt=0, index=0;
-
-	  volatile HAL_StatusTypeDef status = HAL_OK;
-	  status = HAL_FLASHEx_Erase(&EraseInitStruct, &PageError);
-	  CLEAR_BIT(FLASH->CR, FLASH_CR_PER);
-	  while(index < data_length)
-	  {
-		  if (status == HAL_OK)
-		  {
-			  status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, FLASH_STORAGE+u32Offset+write_cnt, data_to_FLASH[index]);
-			  if(status == HAL_OK)
-			  {
-				  write_cnt += 4;
-				  index++;
-			  }
-//			  status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, FLASH_STORAGE+u32Offset, *(uint64_t*)(&data[index]));
-//			  if(status == HAL_OK)
-//			  {
-//			  	  u32Offset += 4;
-//			  	  index += 4;
-//			  }
-		  }
-	  }
-	  u32Offset += 16;
-	  HAL_HAL_FLASH_Lock(); HAL_FLASH_OB_Lock();
-}
-
-void read_flash(uint8_t* data)
-{
-	volatile uint32_t read_data;
-	volatile uint32_t read_cnt=0;
-	do
-	{
-		read_data = *(uint32_t*)(FLASH_STORAGE + read_cnt);
-		if(read_data != 0xFFFFFFFF)
-		{
-			data[read_cnt] = (uint8_t)read_data;
-			data[read_cnt + 1] = (uint8_t)(read_data >> 8);
-			data[read_cnt + 2] = (uint8_t)(read_data >> 16);
-			data[read_cnt + 3] = (uint8_t)(read_data >> 24);
-			read_cnt += 4;
-		}
-	}while(read_data != 0xFFFFFFFF);
-}
-
-uint32_t used_mem(uint32_t address)
-{
-	uint32_t* read_data = NULL, size = 0;
-	read_data = address;
-	while(0xFFFFFFFF != read_data[size])
-	{
-		++size;
-	}
-	return (4*size);
-}
-
-#define FLASH_KEY1               ((uint32_t)0x45670123)
-#define FLASH_KEY2               ((uint32_t)0xCDEF89AB)
-///////////////////////////////////////////////////////
-
-
-
-
-uint8_t flash_ready(void) {
-	return !(FLASH->SR & FLASH_SR_BSY);
-}
-
-void flash_erase_all_pages(void) {
-    FLASH->CR |= FLASH_CR_MER;
-    FLASH->CR |= FLASH_CR_STRT;
-    while(!flash_ready())
-    	;
-    FLASH->CR &= FLASH_CR_MER;
-}
-
-void flash_erase_page(uint32_t address) {
-    FLASH->CR|= FLASH_CR_PER;
-    FLASH->AR = address;
-    FLASH->CR|= FLASH_CR_STRT;
-    while(!flash_ready())
-    	;
-    FLASH->CR&= ~FLASH_CR_PER;
-}
-
-
-void flash_unlock(void) {
-	  FLASH->KEYR = FLASH_KEY1;
-	  FLASH->KEYR = FLASH_KEY2;
-}
-
-void flash_lock() {
-	FLASH->CR |= FLASH_CR_LOCK;
-}
-
-
-void flash_write(uint32_t address,uint32_t data)
-{
-    char chTest[4] = {0};
-    uint16_t test = 0;
-	FLASH->CR |= FLASH_CR_PG;
-//	while(!flash_ready())
-//		;
-//	memset((void*)address, 0, sizeof(uint32_t));
-	while(!flash_ready())
-		;
-	test = (data>>0) & 0xFFFF;
-	//HAL_FLASH_Unlock(); HAL_FLASH_OB_Unlock();
-    *(__IO uint16_t*)address = test;
-    test = *(__IO uint16_t*)address;
-    *(uint16_t*)chTest = *(__IO uint16_t*)address;
-	//memcpy((__IO uint16_t*)address, (uint16_t*)&data, 2);
-	while(!flash_ready())
-		;
-	address+=2;
-	test = (data>>16) & 0xFFFF;
-    *(__IO uint16_t*)address = (data>>16) & 0xFFFF;
-    test = *(__IO uint16_t*)address;
-    *(uint16_t*)(chTest+2) = (uint16_t)data;
-	//memcpy((__IO uint16_t*)address, ((uint16_t*)&data)+2, 2);
-	while(!flash_ready())
-		;
-    FLASH->CR &= ~(FLASH_CR_PG);
-
-}
-
-uint32_t flash_read(uint32_t address) {
-	return (*(__IO uint32_t*) address);
-}
-
-uint32_t flash_erase(uint32_t address)
-{
-	/* Allow Access to option bytes sector */
-	//HAL_FLASH_OB_Unlock();
-
-	 /* Fill EraseInit structure*/
-	FLASH_EraseInitTypeDef EraseInitStruct;
-	EraseInitStruct.TypeErase = FLASH_TYPEERASE_PAGES;
-	EraseInitStruct.PageAddress = address;
-	EraseInitStruct.NbPages = 1;
-	uint32_t PageError;
-	volatile HAL_StatusTypeDef status = HAL_OK;
-	//OS_Tick_Disable();
-	while(!flash_ready())
-			;
-
-	HAL_FLASH_Unlock(); HAL_FLASH_OB_Unlock();
-	status = HAL_FLASHEx_Erase(&EraseInitStruct, &PageError);
-	HAL_FLASH_Lock(); HAL_FLASH_OB_Lock();
-
-	while(!flash_ready())
-			;
-	//OS_Tick_Enable();
-
-	return status;
-}
-
-uint32_t flash_copy_page(uint32_t src, uint32_t dst)
-{
-	HAL_FLASH_Unlock(); HAL_FLASH_OB_Unlock();
-    for(uint32_t i = 0; i<PAGE_SIZE; i += 4)
-    {
-    	flash_write(dst + i, *((uint32_t*)(src + i)));
-    }
-    HAL_FLASH_Lock(); HAL_FLASH_OB_Lock();
-    return HAL_OK;
-}
 
 
 /* USER CODE END 0 */
@@ -510,14 +217,14 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_USART1_UART_Init();
   MX_TIM2_Init();
   MX_USART2_UART_Init();
   MX_ADC1_Init();
-  MX_ADC2_Init();
   MX_RTC_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start(&htim2);
+  set_timer(&htim2);
+
   DATA_LOG_S TestTmp_S = {0}, TestHmd_S = {0};
   LOG_HEADER_S TestHeaders_S = {0};
   memcpy(TestTmp_S.bBuffer, LOGS_BEGIN, 16);
@@ -629,9 +336,8 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART1|RCC_PERIPHCLK_USART2
-                              |RCC_PERIPHCLK_RTC|RCC_PERIPHCLK_TIM2;
-  PeriphClkInit.Usart1ClockSelection = RCC_USART1CLKSOURCE_SYSCLK;
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART2|RCC_PERIPHCLK_RTC
+                              |RCC_PERIPHCLK_TIM2;
   PeriphClkInit.Usart2ClockSelection = RCC_USART2CLKSOURCE_PCLK1;
   PeriphClkInit.RTCClockSelection = RCC_RTCCLKSOURCE_LSI;
   PeriphClkInit.Tim2ClockSelection = RCC_TIM2CLK_HCLK;
@@ -701,61 +407,6 @@ static void MX_ADC1_Init(void)
   /* USER CODE BEGIN ADC1_Init 2 */
 
   /* USER CODE END ADC1_Init 2 */
-
-}
-
-/**
-  * @brief ADC2 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_ADC2_Init(void)
-{
-
-  /* USER CODE BEGIN ADC2_Init 0 */
-
-  /* USER CODE END ADC2_Init 0 */
-
-  ADC_ChannelConfTypeDef sConfig = {0};
-
-  /* USER CODE BEGIN ADC2_Init 1 */
-
-  /* USER CODE END ADC2_Init 1 */
-  /** Common config 
-  */
-  hadc2.Instance = ADC2;
-  hadc2.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV1;
-  hadc2.Init.Resolution = ADC_RESOLUTION_12B;
-  hadc2.Init.ScanConvMode = ADC_SCAN_DISABLE;
-  hadc2.Init.ContinuousConvMode = DISABLE;
-  hadc2.Init.DiscontinuousConvMode = DISABLE;
-  hadc2.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
-  hadc2.Init.ExternalTrigConv = ADC_SOFTWARE_START;
-  hadc2.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-  hadc2.Init.NbrOfConversion = 1;
-  hadc2.Init.DMAContinuousRequests = DISABLE;
-  hadc2.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
-  hadc2.Init.LowPowerAutoWait = DISABLE;
-  hadc2.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;
-  if (HAL_ADC_Init(&hadc2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /** Configure Regular Channel 
-  */
-  sConfig.Channel = ADC_CHANNEL_1;
-  sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SingleDiff = ADC_SINGLE_ENDED;
-  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
-  sConfig.OffsetNumber = ADC_OFFSET_NONE;
-  sConfig.Offset = 0;
-  if (HAL_ADC_ConfigChannel(&hadc2, &sConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN ADC2_Init 2 */
-
-  /* USER CODE END ADC2_Init 2 */
 
 }
 
@@ -869,41 +520,6 @@ static void MX_TIM2_Init(void)
   /* USER CODE BEGIN TIM2_Init 2 */
 
   /* USER CODE END TIM2_Init 2 */
-
-}
-
-/**
-  * @brief USART1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_USART1_UART_Init(void)
-{
-
-  /* USER CODE BEGIN USART1_Init 0 */
-
-  /* USER CODE END USART1_Init 0 */
-
-  /* USER CODE BEGIN USART1_Init 1 */
-
-  /* USER CODE END USART1_Init 1 */
-  huart1.Instance = USART1;
-  huart1.Init.BaudRate = 115200;
-  huart1.Init.WordLength = UART_WORDLENGTH_8B;
-  huart1.Init.StopBits = UART_STOPBITS_1;
-  huart1.Init.Parity = UART_PARITY_NONE;
-  huart1.Init.Mode = UART_MODE_TX_RX;
-  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
-  huart1.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
-  huart1.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-  if (HAL_UART_Init(&huart1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN USART1_Init 2 */
-
-  /* USER CODE END USART1_Init 2 */
 
 }
 

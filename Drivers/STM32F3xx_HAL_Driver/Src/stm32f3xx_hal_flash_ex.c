@@ -192,7 +192,7 @@ HAL_StatusTypeDef HAL_FLASHEx_Erase(FLASH_EraseInitTypeDef *pEraseInit, uint32_t
     
       /* Page Erase requested on address located on bank1 */
       /* Wait for last operation to be completed */
-      //if (FLASH_WaitForLastOperation((uint32_t)FLASH_TIMEOUT_VALUE) == HAL_OK)
+      if (FLASH_WaitForLastOperation((uint32_t)FLASH_TIMEOUT_VALUE) == HAL_OK)
       {
         /*Initialization of PageError variable*/
         *PageError = 0xFFFFFFFFU;
