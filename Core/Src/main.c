@@ -49,7 +49,7 @@ typedef union data_log_s
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define MIN_STACK_SIZE configMINIMAL_STACK_SIZE
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -66,32 +66,32 @@ TIM_HandleTypeDef htim2;
 
 UART_HandleTypeDef huart2;
 
-/* Definitions for readDHT11Data */
-osThreadId_t readDHT11DataHandle;
-const osThreadAttr_t readDHT11Data_attributes = {
-  .name = "readDHT11Data",
+/* Definitions for DHT11TaskHandle */
+osThreadId_t DHT11TaskHandle;
+const osThreadAttr_t DHT11Task_attributes = {
+  .name = "DHT11Task",
   .priority = (osPriority_t) osPriorityNormal,
-  .stack_size = 128 * 4
+  .stack_size = MIN_STACK_SIZE * 4
 };
-/* Definitions for PotentiometerDa */
-osThreadId_t PotentiometerDaHandle;
-const osThreadAttr_t PotentiometerDa_attributes = {
-  .name = "PotentiometerDa",
+/* Definitions for PotentiometerTaskHandle */
+osThreadId_t PotentiometerTaskHandle;
+const osThreadAttr_t PotentiometerTask_attributes = {
+  .name = "PotentiometerTask",
   .priority = (osPriority_t) osPriorityNormal,
-  .stack_size = 128 * 4
+  .stack_size = MIN_STACK_SIZE * 4
 };
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
-void SystemClock_Config(void);
+static void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_RTC_Init(void);
-void StartDefaultTask(void *argument);
+void readDHT11Data(void *argument);
 void readPotentiometerData(void *argument);
 
 /* USER CODE BEGIN PFP */
@@ -196,14 +196,13 @@ int32_t  OS_Tick_Disable (void) {
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
-
+  //HAL_Delay(10000);
   /* USER CODE BEGIN Init */
 
   /* USER CODE END Init */
@@ -223,7 +222,7 @@ int main(void)
   MX_RTC_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start(&htim2);
-  set_timer(&htim2);
+  DHT11_SetTimer(&htim2);
 
   DATA_LOG_S TestTmp_S = {0}, TestHmd_S = {0};
   LOG_HEADER_S TestHeaders_S = {0};
@@ -247,32 +246,11 @@ int main(void)
   /* Init scheduler */
   osKernelInitialize();
 
-  /* USER CODE BEGIN RTOS_MUTEX */
-  /* add mutexes, ... */
-  /* USER CODE END RTOS_MUTEX */
+  /* creation of DHT11TaskHandle */
+  DHT11TaskHandle = osThreadNew(readDHT11Data, NULL, &DHT11Task_attributes);
 
-  /* USER CODE BEGIN RTOS_SEMAPHORES */
-  /* add semaphores, ... */
-  /* USER CODE END RTOS_SEMAPHORES */
-
-  /* USER CODE BEGIN RTOS_TIMERS */
-  /* start timers, add new ones, ... */
-  /* USER CODE END RTOS_TIMERS */
-
-  /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
-  /* USER CODE END RTOS_QUEUES */
-
-  /* Create the thread(s) */
-  /* creation of readDHT11Data */
-  readDHT11DataHandle = osThreadNew(StartDefaultTask, NULL, &readDHT11Data_attributes);
-
-  /* creation of PotentiometerDa */
-  PotentiometerDaHandle = osThreadNew(readPotentiometerData, NULL, &PotentiometerDa_attributes);
-
-  /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
-  /* USER CODE END RTOS_THREADS */
+  /* creation of PotentiometerTaskHandle */
+  PotentiometerTaskHandle = osThreadNew(readPotentiometerData, NULL, &PotentiometerTask_attributes);
 
   /* Start scheduler */
   osKernelStart();
@@ -294,7 +272,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  StartDefaultTask(0);
+	  readDHT11Data(0);
   }
   /* USER CODE END 3 */
 }
@@ -354,17 +332,9 @@ void SystemClock_Config(void)
   */
 static void MX_ADC1_Init(void)
 {
-
-  /* USER CODE BEGIN ADC1_Init 0 */
-
-  /* USER CODE END ADC1_Init 0 */
-
   ADC_MultiModeTypeDef multimode = {0};
   ADC_ChannelConfTypeDef sConfig = {0};
 
-  /* USER CODE BEGIN ADC1_Init 1 */
-
-  /* USER CODE END ADC1_Init 1 */
   /** Common config 
   */
   hadc1.Instance = ADC1;
@@ -404,10 +374,6 @@ static void MX_ADC1_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN ADC1_Init 2 */
-
-  /* USER CODE END ADC1_Init 2 */
-
 }
 
 /**
@@ -588,19 +554,20 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_StartDefaultTask */
+/* USER CODE BEGIN Header_readDHT11Data */
 /**
   * @brief  Function implementing the readDHT11Data thread.
   * @param  argument: Not used 
   * @retval None
   */
-/* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument)
+/* USER CODE END Header_readDHT11Data */
+void readDHT11Data(void *argument)
 {
   /* USER CODE BEGIN 5 */
 	static uint32_t u32Offset = 0;
 	char chMsg[30] = {0};
     char chData[5] = {0};
+    const DHT11_DATA_S *pDHT11Data = 0;
 	static DATA_LOG_S TemperatureData_S = {0},
 			   HumidityData_S = {0},
 			   Test_S = {0};
@@ -622,29 +589,28 @@ void StartDefaultTask(void *argument)
 	  HAL_UART_Transmit(&huart2, chMsg, strlen(chMsg), HAL_MAX_DELAY);
 	  OS_Tick_Disable();
 	  DHT11_Start();
-	  u8Presence = DHT11_Check_Response();
+	  u8Presence = DHT11_CheckResponse();
 	  }
 
-	  for(int i = 0; i<5; ++i)
+	  pDHT11Data = DHT11_ReadData();
+	  if(0 == DHT11_IsDataValid())
 	  {
-	   	chData[i] = DHT11_Read();
+		  continue;
 	  }
+//	  for(int i = 0; i<5; ++i)
+//	  {
+//	   	chData[i] = DHT11_Read();
+//	  }
 	  OS_Tick_Enable();
 
-//	  memcpy(HumidityData_S.DATA_S.sTimestamp,
-//	  	  	 __TIME__,
-//	  	  	 8);
-//	  memcpy(TemperatureData_S.DATA_S.sTimestamp,
-//	  	     __TIME__,
-//	  	  	 8);
 	  get_time(HumidityData_S.DATA_S.sTimestamp);
 	  get_time(TemperatureData_S.DATA_S.sTimestamp);
 
 	  memcpy(HumidityData_S.DATA_S.bDataBuffer,
-	  	     (void*)&chData[0],
+	  	     (void*)pDHT11Data->u8Humidity,
 	   	  	 sizeof(uint8_t));
 	  memcpy(TemperatureData_S.DATA_S.bDataBuffer,
-	  	     (void*)&chData[2],
+	  	     (void*)pDHT11Data->u8Temperature,
 	  	  	 sizeof(uint8_t));
 
 	  OS_Tick_Disable();
@@ -652,51 +618,30 @@ void StartDefaultTask(void *argument)
 	  LogData(HumidityData_S.bBuffer, sizeof(DATA_LOG_S));
 	  // Initialise the xLastWakeTime variable with the current time.
 	  xLastWakeTime = xTaskGetTickCount();
-	  //LogData(LogHeaderS.bBuffer, sizeof(LOG_HEADER_S));
-//	  HAL_FLASH_Unlock(); HAL_FLASH_OB_Unlock();
-//	  int i = 0;
-//	  uint32_t test = 0;
-//	  char chTest[4] = {0};
-//	  for(; i<4; ++i)
-//	  {
-//		  test = ((uint32_t*)TemperatureData_S.bBuffer)[i];
-//		  *(uint32_t*)chTest = ((uint32_t*)TemperatureData_S.bBuffer)[i];
-//		  flash_write(LOGS_BEGIN+LogHeaderS.HEADER_S.u32LogSize+i*4, ((uint32_t*)TemperatureData_S.bBuffer)[i]);
-//	  }
-//	  LogHeaderS.HEADER_S.u32LogSize += 16;
-//	  for(i = 0; i<4; ++i)
-//	  {
-//		  test = ((uint32_t*)HumidityData_S.bBuffer)[i];
-//		  *(uint32_t*)chTest = ((uint32_t*)HumidityData_S.bBuffer)[i];
-//	  	  flash_write(LOGS_BEGIN+LogHeaderS.HEADER_S.u32LogSize+i*4, ((uint32_t*)HumidityData_S.bBuffer)[i]);
-//	  }
-//	  LogHeaderS.HEADER_S.u32LogSize += 16;
-//	  HAL_FLASH_Lock(); HAL_FLASH_OB_Lock();
+
 
 	  LoggerUpdate(UPDATED);
 	  LOG_HEADER_S TestHeaders_S = {0};
 	  memcpy(TestHeaders_S.bBuffer, LOGGER_DATA, 16);
-//	  save_to_flash((uint8_t*)&HumidityData_S);//, sizeof(DATA_LOG_S));
-//	  save_to_flash((uint8_t*)&TemperatureData_S);//, sizeof(DATA_LOG_S));
+
       OS_Tick_Enable();
 	  memset(HumidityData_S.DATA_S.bDataBuffer, 0, sizeof(uint32_t)+8);
 	  memset(TemperatureData_S.DATA_S.bDataBuffer, 0, sizeof(uint32_t)+8);
-	  //memcpy(Test_S.bBuffer, LOGS_BEGIN+LogHeaderS.HEADER_S.u32LogSize+u32Offset-32, 16);
-      //memcpy(Test_S.bBuffer, LOGS_BEGIN+LogHeaderS.HEADER_S.u32LogSize-16, 16);
-	  u8Presence = 0;
-	  memset(chMsg, 0, 20);
-	  uint64_t f = 0.0;
+//	  u8Presence = 0;
+//	  memset(chMsg, 0, 20);
+//	  uint64_t f = 0.0;
 	  uint16_t u16CheckSum = 0;
-	  for(int i = 0; i<5; ++i)
+	  memcpy(chData, pDHT11Data, sizeof(DHT11_DATA_S));
+	  for(int i = 0; i<4; i+=2)
 	  {
-	  	f = chData[i];
-	  	if(4 != i){
-	  	    u16CheckSum += chData[i];
-	  	}
-	  	sprintf(chMsg, "Data%d: %d\n\r", i, f);
-	  	//HAL_UART_Transmit(&huart2, chMsg, strlen(chMsg), HAL_MAX_DELAY);
+	  	uint8_t value = chData[i];
+	  	uint8_t f_part = chData[i+1];
+	  	u16CheckSum += chData[i];
+	  	u16CheckSum += chData[i+1];
+	  	sprintf(chMsg, "Data%d: %d,%d\n\r", i, value, f_part);
+	  	HAL_UART_Transmit(&huart2, chMsg, strlen(chMsg), HAL_MAX_DELAY);
 	  }
-	  HAL_UART_Transmit(&huart2, TemperatureData_S.DATA_S.sTimestamp, 8, HAL_MAX_DELAY);
+	  //HAL_UART_Transmit(&huart2, TemperatureData_S.DATA_S.sTimestamp, 8, HAL_MAX_DELAY);
 	  sprintf(chMsg, "CHECK_SUM: %d\n\r", ((uint8_t*)&u16CheckSum)[0]);
 	  HAL_UART_Transmit(&huart2, chMsg, strlen(chMsg), HAL_MAX_DELAY);
 	  vTaskDelayUntil( &xLastWakeTime, 8500);
@@ -708,7 +653,7 @@ void StartDefaultTask(void *argument)
 
 /* USER CODE BEGIN Header_readPotentiometerData */
 /**
-* @brief Function implementing the PotentiometerDa thread.
+* @brief Function implementing the PotentiometerTaskHandle thread.
 * @param argument: Not used
 * @retval None
 */

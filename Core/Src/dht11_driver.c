@@ -5,28 +5,35 @@
  *      Author: oleksandr.kovbasiuk
  */
 #include "dht11_driver.h"
-//#include "stm32f3xx_hal.h"
 
 #define DHT11_GPIO GPIOA
 #define DHT11_PIN  GPIO_PIN_1
+
+typedef enum response_e
+{
+	SUCCESS_R = 0,
+	FAIL_R = 1,
+	UNDEFINED_R = -1
+} RESPONSE_E;
+
 
 static TIM_HandleTypeDef htim;
 
 
 /*****************************___DHT11___*****************************/
-float fTemperature = 0.0;
-float fHumidity = 0.0;
-uint8_t u8RhByte1 = 0, u8RhByte2 = 0, u8Temp1 = 0, u8Temp2 = 0;
-uint16_t u16CheckSum = 0, u16RH = 0, u16Temp = 0;
+//float fTemperature = 0.0;
+//float fHumidity = 0.0;
+//uint8_t u8RhByte1 = 0, u8RhByte2 = 0, u8Temp1 = 0, u8Temp2 = 0;
+//uint16_t u16CheckSum = 0, u16RH = 0, u16Temp = 0;
+static DHT11_DATA_S DHT11Data_s = {0};
 
-
-void set_timer(TIM_HandleTypeDef* pTimer)
+void DHT11_SetTimer(TIM_HandleTypeDef* pTimer)
 {
 	memcpy(&htim, pTimer, sizeof(TIM_HandleTypeDef));
 }
 
 
-TIM_HandleTypeDef* get_timer(void)
+TIM_HandleTypeDef* DHT11_GetTimer(void)
 {
 	return &htim;
 }
@@ -42,22 +49,34 @@ void delay_us(uint16_t us)
 	// wait for the counter to reach the us input in the parameter
 }
 
-void set_Pin_Output(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin)
+/**
+  * @brief Initialize pin on OUTPUT
+  * @param pGPIOx -
+  *        GPIO_Pin -
+  * @retval None
+  */
+void set_Pin_Output(GPIO_TypeDef *pGPIOx, uint16_t GPIO_Pin)
 {
 	GPIO_InitTypeDef GPIO_Init_S = {0};
 	GPIO_Init_S.Pin = GPIO_Pin;
 	GPIO_Init_S.Mode = GPIO_MODE_OUTPUT_PP;
 	GPIO_Init_S.Speed = GPIO_SPEED_FREQ_LOW;
-	HAL_GPIO_Init(GPIOx, &GPIO_Init_S);
+	HAL_GPIO_Init(pGPIOx, &GPIO_Init_S);
 }
 
-void set_Pin_Input(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin)
+/**
+  * @brief Initialize pin on INPUT
+  * @param pGPIOx -
+  *        GPIO_Pin -
+  * @retval None
+  */
+void set_Pin_Input(GPIO_TypeDef *pGPIOx, uint16_t GPIO_Pin)
 {
 	GPIO_InitTypeDef GPIO_Init_S = {0};
 	GPIO_Init_S.Pin = GPIO_Pin;
 	GPIO_Init_S.Mode = GPIO_MODE_INPUT;
 	GPIO_Init_S.Pull = GPIO_NOPULL;
-	HAL_GPIO_Init(GPIOx, &GPIO_Init_S);
+	HAL_GPIO_Init(pGPIOx, &GPIO_Init_S);
 }
 
 void DHT11_Start(void)
@@ -70,20 +89,20 @@ void DHT11_Start(void)
 	set_Pin_Input(DHT11_GPIO, DHT11_PIN);
 }
 
-uint8_t DHT11_Check_Response(void)
+uint8_t DHT11_CheckResponse(void)
 {
-	uint8_t u8Response = 0;
+	uint8_t u8Response = SUCCESS_R;
 	delay_us(40);
 	if(!HAL_GPIO_ReadPin(DHT11_GPIO, DHT11_PIN))
 	{
 		delay_us(80);
 		if(HAL_GPIO_ReadPin(DHT11_GPIO, DHT11_PIN))
 		{
-			u8Response = 1;
+			u8Response = FAIL_R;
 		}
 		else
 		{
-			u8Response = -1;
+			u8Response = UNDEFINED_R;
 		}
 	}
 
@@ -100,7 +119,7 @@ uint8_t DHT11_Check_Response(void)
 	return u8Response;
 }
 
-uint8_t DHT11_Read(void)
+uint8_t DHT11_ReadByte(void)
 {
 	uint8_t i = 0, j;
 	for(j = 0; j<8; ++j)
@@ -129,4 +148,21 @@ uint8_t DHT11_Read(void)
 		}
 	}
 	return i;
+}
+
+const DHT11_DATA_S* DHT11_ReadData(void)
+{
+	DHT11Data_s.u8Humidity = DHT11_ReadByte();
+	DHT11Data_s.u8HmdFloatPart = DHT11_ReadByte();
+	DHT11Data_s.u8Temperature = DHT11_ReadByte();
+	DHT11Data_s.u8TmpFloatPart = DHT11_ReadByte();
+	DHT11Data_s.u8CheckSum = DHT11_ReadByte();
+	return &DHT11Data_s;
+}
+
+uint8_t DHT11_IsDataValid(void)
+{
+	uint8_t u8Sum = (DHT11Data_s.u8Humidity + DHT11Data_s.u8HmdFloatPart +
+		    DHT11Data_s.u8Temperature + DHT11Data_s.u8TmpFloatPart);
+	return u8Sum == DHT11Data_s.u8CheckSum;
 }
