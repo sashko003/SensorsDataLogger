@@ -78,7 +78,7 @@ osThreadId_t PotentiometerTaskHandle;
 const osThreadAttr_t PotentiometerTask_attributes = {
   .name = "PotentiometerTask",
   .priority = (osPriority_t) osPriorityNormal,
-  .stack_size = MIN_STACK_SIZE * 4
+  .stack_size = MIN_STACK_SIZE * 3
 };
 /* USER CODE BEGIN PV */
 
@@ -272,7 +272,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  readDHT11Data(0);
+	  //readDHT11Data(0);
   }
   /* USER CODE END 3 */
 }
@@ -289,13 +289,13 @@ void SystemClock_Config(void)
 
   /** Initializes the CPU, AHB and APB busses clocks 
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI|RCC_OSCILLATORTYPE_HSE;
-  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL9;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL2;
   RCC_OscInitStruct.PLL.PREDIV = RCC_PREDIV_DIV1;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -310,7 +310,7 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
   {
     Error_Handler();
   }
@@ -332,9 +332,17 @@ void SystemClock_Config(void)
   */
 static void MX_ADC1_Init(void)
 {
+
+  /* USER CODE BEGIN ADC1_Init 0 */
+
+  /* USER CODE END ADC1_Init 0 */
+
   ADC_MultiModeTypeDef multimode = {0};
   ADC_ChannelConfTypeDef sConfig = {0};
 
+  /* USER CODE BEGIN ADC1_Init 1 */
+
+  /* USER CODE END ADC1_Init 1 */
   /** Common config 
   */
   hadc1.Instance = ADC1;
@@ -374,6 +382,10 @@ static void MX_ADC1_Init(void)
   {
     Error_Handler();
   }
+  /* USER CODE BEGIN ADC1_Init 2 */
+
+  /* USER CODE END ADC1_Init 2 */
+
 }
 
 /**
@@ -463,7 +475,7 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 72-1;
+  htim2.Init.Prescaler = 16-1;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim2.Init.Period = 0xFFFF-1;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -564,13 +576,17 @@ static void MX_GPIO_Init(void)
 void readDHT11Data(void *argument)
 {
   /* USER CODE BEGIN 5 */
-	static uint32_t u32Offset = 0;
+	//static uint32_t u32Offset = 0;
+#ifdef DEBUG
 	char chMsg[30] = {0};
     char chData[5] = {0};
+#endif
     const DHT11_DATA_S *pDHT11Data = 0;
-	static DATA_LOG_S TemperatureData_S = {0},
-			   HumidityData_S = {0},
-			   Test_S = {0};
+	DATA_LOG_S TemperatureData_S = {0},
+			   HumidityData_S = {0};
+#ifdef DEBUG
+	DATA_LOG_S Test_S = {0};
+#endif
 	memcpy(TemperatureData_S.DATA_S.sDataType,
 		   "TMP",
 		   3);
@@ -581,16 +597,18 @@ void readDHT11Data(void *argument)
   /* Infinite loop */
   for(;;)
   {
+#ifdef DEBUG
 	  HAL_UART_Transmit(&huart2, "NEW_LOOP\n\r", 11, HAL_MAX_DELAY);
 	  memset(chMsg, 0, 30);
 	  memset(chData, 0, 5);
-	  {
+	  /**/
 	  sprintf(chMsg, "Response: %d\n\r", u8Presence);
 	  HAL_UART_Transmit(&huart2, chMsg, strlen(chMsg), HAL_MAX_DELAY);
+#endif
 	  OS_Tick_Disable();
 	  DHT11_Start();
 	  u8Presence = DHT11_CheckResponse();
-	  }
+	  /**/
 
 	  pDHT11Data = DHT11_ReadData();
 	  if(0 == DHT11_IsDataValid())
@@ -630,6 +648,7 @@ void readDHT11Data(void *argument)
 //	  u8Presence = 0;
 //	  memset(chMsg, 0, 20);
 //	  uint64_t f = 0.0;
+#ifdef DEBUG
 	  uint16_t u16CheckSum = 0;
 	  memcpy(chData, pDHT11Data, sizeof(DHT11_DATA_S));
 	  for(int i = 0; i<4; i+=2)
@@ -644,6 +663,7 @@ void readDHT11Data(void *argument)
 	  //HAL_UART_Transmit(&huart2, TemperatureData_S.DATA_S.sTimestamp, 8, HAL_MAX_DELAY);
 	  sprintf(chMsg, "CHECK_SUM: %d\n\r", ((uint8_t*)&u16CheckSum)[0]);
 	  HAL_UART_Transmit(&huart2, chMsg, strlen(chMsg), HAL_MAX_DELAY);
+#endif
 	  vTaskDelayUntil( &xLastWakeTime, 8500);
 	  //vTaskDelay(g_TicksToDelay*1000/portTICK_PERIOD_MS);
 	  //HAL_Delay(500);
@@ -661,7 +681,9 @@ void readDHT11Data(void *argument)
 void readPotentiometerData(void *argument)
 {
   /* USER CODE BEGIN readPotentiometerData */
+#ifdef DEBUG
 	char chMsg[10] = {0};
+#endif
 	//uint8_t u8Buffer[0x800] = {0};
 	uint32_t uiValue = 0;
 	DATA_LOG_S PotentiometerData_S = {0};
@@ -669,7 +691,9 @@ void readPotentiometerData(void *argument)
   /* Infinite loop */
   for(;;)
   {
+#ifdef DEBUG
 	  memset(chMsg, 0, 10);
+#endif
 	  HAL_ADC_Start(&hadc1);
 	  HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
 	  uiValue = HAL_ADC_GetValue(&hadc1);
@@ -688,8 +712,10 @@ void readPotentiometerData(void *argument)
 	  //save_to_flash((uint8_t*)&PotentiometerData_S, sizeof(DATA_LOG_S));
 	  OS_Tick_Enable();
 	  //read_flash(u8Buffer);
+#ifdef DEBUG
 	  sprintf(chMsg, "DELAY: %u\n\r", g_TicksToDelay);
 	  HAL_UART_Transmit(&huart2, chMsg, strlen(chMsg), HAL_MAX_DELAY);
+#endif
 	  //vTaskDelay(g_TicksToDelay);
 	  HAL_Delay(g_TicksToDelay*1000);
     //osDelay(500);
