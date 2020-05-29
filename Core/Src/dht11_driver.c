@@ -11,9 +11,9 @@
 
 typedef enum response_e
 {
-	SUCCESS_R = 0,
-	FAIL_R = 1,
-	UNDEFINED_R = -1
+	UNDEFINED_R = 0,
+	SUCCESS_R = 1,
+	FAIL_R = -1,
 } RESPONSE_E;
 
 
@@ -91,18 +91,18 @@ void DHT11_Start(void)
 
 uint8_t DHT11_CheckResponse(void)
 {
-	uint8_t u8Response = SUCCESS_R;
+	uint8_t u8Response = UNDEFINED_R;
 	delay_us(40);
 	if(!HAL_GPIO_ReadPin(DHT11_GPIO, DHT11_PIN))
 	{
 		delay_us(80);
 		if(HAL_GPIO_ReadPin(DHT11_GPIO, DHT11_PIN))
 		{
-			u8Response = FAIL_R;
+			u8Response = SUCCESS_R;
 		}
 		else
 		{
-			u8Response = UNDEFINED_R;
+			u8Response = FAIL_R;
 		}
 	}
 
