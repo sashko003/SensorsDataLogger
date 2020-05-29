@@ -10,8 +10,15 @@
 
 #include "main.h"
 
-void flash_write(uint32_t address,uint32_t data);
-uint32_t flash_erase(uint32_t address);
+void FlashWrite(uint32_t address,uint32_t data);
+uint32_t FlashErase(uint32_t address);
+void FlashEraseAllPages(void);
+void FlashErasePage(uint32_t address);
+void FlashUnlock(void);
+void FlashLock();
+uint32_t FlashRead(uint32_t address);
+uint32_t FlashCopyPage(uint32_t src, uint32_t dst);
+
 
 
 #endif /* INC_FLASH_DRIVER_H_ */
