@@ -141,7 +141,7 @@ void set_time (void)
   HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR1, 0x32F2); // backup register
 }
 
-void get_time(char* time)
+void get_time(volatile char* time)
 {
 	//char time[10] = {0};
 	//char date[10] = {0};
@@ -152,6 +152,11 @@ void get_time(char* time)
 /* Get the RTC current Date */
  HAL_RTC_GetDate(&hrtc, &gDate, RTC_FORMAT_BIN);
 /* Display time Format: hh:mm:ss */
+// memcpy(time, &gTime.Hours, 2);
+// memcpy(time + 2, &(":"), 1);
+// memcpy(time, &gTime.Minutes, 2);
+// memcpy(time + 2, &(":"), 1);
+// memcpy(time, &gTime.Seconds, 2);
  sprintf((char*)time,"%02d:%02d:%02d",gTime.Hours, gTime.Minutes, gTime.Seconds);
  int len = strlen(time);
  len = sizeof(time);
@@ -202,7 +207,7 @@ int main(void)
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
-  //HAL_Delay(10000);
+  HAL_Delay(10000);
   /* USER CODE BEGIN Init */
 
   /* USER CODE END Init */
@@ -229,8 +234,8 @@ int main(void)
   memcpy(TestTmp_S.bBuffer, LOGS_BEGIN, 16);
   memcpy(TestHmd_S.bBuffer, LOGS_BEGIN+16, 16);
   memcpy(TestHeaders_S.bBuffer, LOGGER_DATA, 16);
-  flash_erase(FLASH_STORAGE);
-  flash_erase(MIRROR_PAGE);
+  FlashErase(FLASH_STORAGE);
+  FlashErase(MIRROR_PAGE);
   LoggerInit();
   set_time();
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, SET);
@@ -597,6 +602,9 @@ void readDHT11Data(void *argument)
   /* Infinite loop */
   for(;;)
   {
+#ifdef RELEASE
+	  uint8_t i = 0;
+#endif
 #ifdef DEBUG
 	  HAL_UART_Transmit(&huart2, "NEW_LOOP\n\r", 11, HAL_MAX_DELAY);
 	  memset(chMsg, 0, 30);
@@ -608,6 +616,10 @@ void readDHT11Data(void *argument)
 	  OS_Tick_Disable();
 	  DHT11_Start();
 	  u8Presence = DHT11_CheckResponse();
+	  if(1 != u8Presence)
+	  {
+		  continue;
+	  }
 	  /**/
 
 	  pDHT11Data = DHT11_ReadData();
@@ -632,13 +644,13 @@ void readDHT11Data(void *argument)
 	  	  	 sizeof(uint8_t));
 
 	  OS_Tick_Disable();
-	  LogData(TemperatureData_S.bBuffer, sizeof(DATA_LOG_S));
-	  LogData(HumidityData_S.bBuffer, sizeof(DATA_LOG_S));
+	  LoggerSaveData(TemperatureData_S.bBuffer, sizeof(DATA_LOG_S));
+	  LoggerSaveData(HumidityData_S.bBuffer, sizeof(DATA_LOG_S));
 	  // Initialise the xLastWakeTime variable with the current time.
 	  xLastWakeTime = xTaskGetTickCount();
 
 
-	  LoggerUpdate(UPDATED);
+	  LoggerSaveState(UPDATED);
 	  LOG_HEADER_S TestHeaders_S = {0};
 	  memcpy(TestHeaders_S.bBuffer, LOGGER_DATA, 16);
 
@@ -651,15 +663,19 @@ void readDHT11Data(void *argument)
 #ifdef DEBUG
 	  uint16_t u16CheckSum = 0;
 	  memcpy(chData, pDHT11Data, sizeof(DHT11_DATA_S));
-	  for(int i = 0; i<4; i+=2)
+	  for(int i = 0; i<4; ++i)
 	  {
-	  	uint8_t value = chData[i];
-	  	uint8_t f_part = chData[i+1];
+//	  	uint8_t value = chData[i];
+//	  	uint8_t f_part = chData[i+1];
 	  	u16CheckSum += chData[i];
-	  	u16CheckSum += chData[i+1];
-	  	sprintf(chMsg, "Data%d: %d,%d\n\r", i, value, f_part);
-	  	HAL_UART_Transmit(&huart2, chMsg, strlen(chMsg), HAL_MAX_DELAY);
+//	  	u16CheckSum += chData[i+1];
+//	  	sprintf(chMsg, "Data%d: %d,%d\n\r", i, value, f_part);
+//	  	HAL_UART_Transmit(&huart2, chMsg, strlen(chMsg), HAL_MAX_DELAY);
 	  }
+//	  sprintf(chMsg, "Humidity: %d,%d\n\r", pDHT11Data->u8Humidity, pDHT11Data->u8HmdFloatPart);
+//	  HAL_UART_Transmit(&huart2, chMsg, strlen(chMsg), HAL_MAX_DELAY);
+//	  sprintf(chMsg, "Temperature: %d,%d\n\r", pDHT11Data->u8Temperature, pDHT11Data->u8TmpFloatPart);
+//	  HAL_UART_Transmit(&huart2, chMsg, strlen(chMsg), HAL_MAX_DELAY);
 	  //HAL_UART_Transmit(&huart2, TemperatureData_S.DATA_S.sTimestamp, 8, HAL_MAX_DELAY);
 	  sprintf(chMsg, "CHECK_SUM: %d\n\r", ((uint8_t*)&u16CheckSum)[0]);
 	  HAL_UART_Transmit(&huart2, chMsg, strlen(chMsg), HAL_MAX_DELAY);
@@ -688,6 +704,9 @@ void readPotentiometerData(void *argument)
 	uint32_t uiValue = 0;
 	DATA_LOG_S PotentiometerData_S = {0};
 	TickType_t xLastWakeTime;
+	memcpy(PotentiometerData_S.DATA_S.sDataType,
+				 "PTM",
+				 3);
   /* Infinite loop */
   for(;;)
   {
@@ -701,19 +720,18 @@ void readPotentiometerData(void *argument)
 	  memcpy(PotentiometerData_S.DATA_S.sTimestamp,
 			 __TIME__,
 			 8);
-	  memcpy(PotentiometerData_S.DATA_S.sDataType,
-			 "PTM",
-			 3);
+	  //get_time(PotentiometerData_S.DATA_S.sTimestamp);
 	  memcpy(PotentiometerData_S.DATA_S.bDataBuffer,
-			 (char*)(&uiValue),
-			 sizeof(uint32_t));
+	  		(char*)(&uiValue),
+	  		sizeof(uint32_t));
+
 	  OS_Tick_Disable();
-	  LogData(PotentiometerData_S.bBuffer, sizeof(DATA_LOG_S));
+	  LoggerSaveData(PotentiometerData_S.bBuffer, sizeof(DATA_LOG_S));
 	  //save_to_flash((uint8_t*)&PotentiometerData_S, sizeof(DATA_LOG_S));
 	  OS_Tick_Enable();
 	  //read_flash(u8Buffer);
 #ifdef DEBUG
-	  sprintf(chMsg, "DELAY: %u\n\r", g_TicksToDelay);
+	  sprintf(chMsg, "PTM: %u\n\r", uiValue);
 	  HAL_UART_Transmit(&huart2, chMsg, strlen(chMsg), HAL_MAX_DELAY);
 #endif
 	  //vTaskDelay(g_TicksToDelay);
