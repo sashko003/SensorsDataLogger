@@ -52,7 +52,7 @@ void LoggerInit(void)
 //	}
 }
 
-void LoggerUpdate(LOGGER_STATE_E state)
+void LoggerSaveState(LOGGER_STATE_E state)
 {
 	static uint16_t u16Offset = 0;
 	uint8_t u8Buffer[LOGGER_STORE_DATA_SIZE] = {0};
@@ -65,21 +65,21 @@ void LoggerUpdate(LOGGER_STATE_E state)
 	if(u16Offset+LOGGER_STORE_DATA_SIZE >= PAGE_SIZE ||
 	   0 == u16Offset)
 	{
-		flash_erase(SYSTEM_PAGE);
+		FlashErase(SYSTEM_PAGE);
 		u16Offset = 0;
 	}
     for(int i = 0; i<LOGGER_STORE_DATA_SIZE; i+=4)
     {
-    	flash_write(SYSTEM_PAGE+u16Offset, *((uint16_t*)(&u8Buffer + i)));
+    	FlashWrite(SYSTEM_PAGE+u16Offset, *((uint16_t*)(&u8Buffer + i)));
     	u16Offset += 4;
     }
 	memcpy(&test, (void*)(SYSTEM_PAGE+u16Offset), LOGGER_STORE_DATA_SIZE);
 	HAL_FLASH_Lock(); HAL_FLASH_OB_Lock();
 }
 
-void LogData(uint8_t* pData, uint32_t size)
+void LoggerSaveData(uint8_t* pData, uint32_t size)
 {
-	LoggerUpdate(IN_WORK);
+	LoggerSaveState(IN_WORK);
 	if(LoggerS._LogSize+size >= PAGE_SIZE)
 	{
 		LoggerS._CurrentPage += 1;
@@ -101,14 +101,14 @@ void LogData(uint8_t* pData, uint32_t size)
 		{
 			for(int i = 0; i<size; i+=4)
 			{
-				flash_write(page_adr + i, 0);
+				FlashWrite(page_adr + i, 0);
 			}
 		}
 		else
 		{
 			//flash_erase(MIRROR_PAGE);
 			//flash_copy_page(page_adr, MIRROR_PAGE);
-			flash_erase(page_adr);
+			FlashErase(page_adr);
 		}
 		LogHeaderS.HEADER_S.u32LogSize = 0;
 		LoggerS._LogSize = 0;
@@ -120,7 +120,7 @@ void LogData(uint8_t* pData, uint32_t size)
 		uint32_t curr_adr = LOGS_BEGIN+(LoggerS._CurrentPage*PAGE_SIZE)+LoggerS._LogSize;
 		for(int i = 0; i<size; i+=4)
 		{
-			flash_write(curr_adr+i, *(uint32_t*)(pData+i));
+			FlashWrite(curr_adr+i, *(uint32_t*)(pData+i));
 		}
 	}
 //	else

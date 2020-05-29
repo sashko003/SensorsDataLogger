@@ -47,7 +47,7 @@ typedef struct logger_data_s
 } LOGGER_DATA_S;
 
 void LoggerInit(void);
-void LoggerUpdate(LOGGER_STATE_E state);
-void LogData(uint8_t* pData, uint32_t size);
+void LoggerSaveState(LOGGER_STATE_E state);
+void LoggerSaveData(uint8_t* pData, uint32_t size);
 
 
