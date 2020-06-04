@@ -152,10 +152,15 @@ uint8_t DHT11_ReadByte(void)
 
 const DHT11_DATA_S* DHT11_ReadData(void)
 {
+	/* get humidity byte */
 	DHT11Data_s.u8Humidity = DHT11_ReadByte();
+	/* get humidity float part byte */
 	DHT11Data_s.u8HmdFloatPart = DHT11_ReadByte();
+	/* get temperature byte */
 	DHT11Data_s.u8Temperature = DHT11_ReadByte();
+	/* get temperature float byte */
 	DHT11Data_s.u8TmpFloatPart = DHT11_ReadByte();
+	/* get check sum */
 	DHT11Data_s.u8CheckSum = DHT11_ReadByte();
 	return &DHT11Data_s;
 }

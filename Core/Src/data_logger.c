@@ -1,7 +1,7 @@
 #include "data_logger.h"
 #include "flash_driver.h"
 
-static LOG_HEADER_S LogHeaderS = {0};
+//static LOG_HEADER_S LogHeaderS = {0};
 static LOGGER_DATA_S LoggerS = {0};
 
 static uint32_t find_last_record(void);
@@ -70,7 +70,7 @@ void LoggerSaveState(LOGGER_STATE_E state)
 	}
     for(int i = 0; i<LOGGER_STORE_DATA_SIZE; i+=4)
     {
-    	FlashWrite(SYSTEM_PAGE+u16Offset, *((uint16_t*)(&u8Buffer + i)));
+    	FlashWrite(SYSTEM_PAGE+u16Offset, *((uint32_t*)(&u8Buffer + i)));
     	u16Offset += 4;
     }
 	memcpy(&test, (void*)(SYSTEM_PAGE+u16Offset), LOGGER_STORE_DATA_SIZE);
@@ -83,11 +83,9 @@ void LoggerSaveData(uint8_t* pData, uint32_t size)
 	if(LoggerS._LogSize+size >= PAGE_SIZE)
 	{
 		LoggerS._CurrentPage += 1;
-		LogHeaderS.HEADER_S.u8PageNumber += 1;
 
 		if(MAX_PAGES-RESERVED_PAGES == LoggerS._CurrentPage)
 		{
-			LogHeaderS.HEADER_S.u8PageNumber = 0;
 			LoggerS._CurrentPage = 0;
 			LoggerS._FilledPages -= 1;
 			LoggerS._LoopNumber += 1;
@@ -106,16 +104,13 @@ void LoggerSaveData(uint8_t* pData, uint32_t size)
 		}
 		else
 		{
-			//flash_erase(MIRROR_PAGE);
-			//flash_copy_page(page_adr, MIRROR_PAGE);
 			FlashErase(page_adr);
 		}
-		LogHeaderS.HEADER_S.u32LogSize = 0;
 		LoggerS._LogSize = 0;
 	}
-	HAL_FLASH_Unlock(); HAL_FLASH_OB_Unlock();
+	HAL_FLASH_Unlock();
 
-	if(0 == size%4)
+	if(0 == size%12)
 	{
 		uint32_t curr_adr = LOGS_BEGIN+(LoggerS._CurrentPage*PAGE_SIZE)+LoggerS._LogSize;
 		for(int i = 0; i<size; i+=4)
@@ -123,17 +118,9 @@ void LoggerSaveData(uint8_t* pData, uint32_t size)
 			FlashWrite(curr_adr+i, *(uint32_t*)(pData+i));
 		}
 	}
-//	else
-//	{
-//		for(int i = 0; i<size-1; i+=2)
-//		{
-//			flash_write(FLASH_STORAGE+LogHeaderS.HEADER_S.u32LogSize+i, *(uint16_t*)pData);
-//		}
-//		flash_write(FLASH_STORAGE+LogHeaderS.HEADER_S.u32LogSize+i, *(uint16_t*)pData);
-//	}
-	LogHeaderS.HEADER_S.u32LogSize += size;
+
 	LoggerS._LogSize += size;
-	HAL_FLASH_Lock(); HAL_FLASH_OB_Lock();
+	HAL_FLASH_Lock();
 }
 
 static uint32_t find_last_record(void)
