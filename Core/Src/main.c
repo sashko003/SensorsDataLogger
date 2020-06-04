@@ -152,7 +152,6 @@ void get_time(volatile char* time)
  //sprintf((char*)date,"%02d-%02d-%2d",gDate.Date, gDate.Month, 2000 + gDate.Year);
 }
 
-
 uint32_t g_TicksToDelay = 0;
 uint8_t u8Presence = 0;
 
@@ -565,6 +564,7 @@ void readDHT11Data(void *argument)
     const DHT11_DATA_S *pDHT11Data = 0;
 	DATA_LOG_S TemperatureData_S = {0},
 			   HumidityData_S = {0};
+	static uint8_t Dht11PrevValues[4] = {0};
 #ifdef DEBUG
 	DATA_LOG_S Test_S = {0};
 #endif
@@ -611,18 +611,38 @@ void readDHT11Data(void *argument)
 	  get_time(HumidityData_S.DATA_S.sTimestamp);
 	  get_time(TemperatureData_S.DATA_S.sTimestamp);
 
-	  *HumidityData_S.DATA_S.bDataBuffer = pDHT11Data->u8Humidity;
-	  *TemperatureData_S.DATA_S.bDataBuffer = pDHT11Data->u8Temperature;
-//	  memcpy(HumidityData_S.DATA_S.bDataBuffer,
-//	  	     (void*)pDHT11Data->u8Humidity,
-//	   	  	 sizeof(uint8_t));
-//	  memcpy(TemperatureData_S.DATA_S.bDataBuffer,
-//	  	     (void*)pDHT11Data->u8Temperature,
-//	  	  	 sizeof(uint8_t));
+	  HumidityData_S.DATA_S.bDataBuffer[0] = pDHT11Data->u8Humidity;
+	  HumidityData_S.DATA_S.bDataBuffer[1] = pDHT11Data->u8HmdFloatPart;
+	  TemperatureData_S.DATA_S.bDataBuffer[0] = pDHT11Data->u8Temperature;
+	  TemperatureData_S.DATA_S.bDataBuffer[1] = pDHT11Data->u8TmpFloatPart;
 
-	  OS_Tick_Disable();
-	  LoggerSaveData(TemperatureData_S.bBuffer, sizeof(DATA_LOG_S));
-	  LoggerSaveData(HumidityData_S.bBuffer, sizeof(DATA_LOG_S));
+
+	  if((Dht11PrevValues[0] != HumidityData_S.bBuffer[1])
+			  ||
+		 (Dht11PrevValues[1] != HumidityData_S.bBuffer[2]))
+	  {
+		  LoggerSaveData(HumidityData_S.bBuffer, sizeof(DATA_LOG_S));
+		  Dht11PrevValues[0] = HumidityData_S.bBuffer[1];
+		  Dht11PrevValues[1] = HumidityData_S.bBuffer[2];
+	  }
+	  else
+	  {
+		  /* skip this value */
+	  }
+
+	  if((Dht11PrevValues[2] != TemperatureData_S.bBuffer[1])
+			  ||
+		 (Dht11PrevValues[3] != TemperatureData_S.bBuffer[2]))
+	  {
+		  LoggerSaveData(TemperatureData_S.bBuffer, sizeof(DATA_LOG_S));
+		  Dht11PrevValues[2] = TemperatureData_S.bBuffer[1];
+		  Dht11PrevValues[3] = TemperatureData_S.bBuffer[2];
+	  }
+	  else
+	  {
+		  /* skip this value */
+	  }
+
 	  // Initialise the xLastWakeTime variable with the current time.
 	  xLastWakeTime = xTaskGetTickCount();
 
@@ -631,7 +651,6 @@ void readDHT11Data(void *argument)
 	  LOGGER_DATA_S TestHeaders_S = {0};
 	  memcpy(&TestHeaders_S, LOGGER_DATA, 16);
 
-      OS_Tick_Enable();
 	  memset(HumidityData_S.DATA_S.bDataBuffer, 0, sizeof(uint32_t)+8);
 	  memset(TemperatureData_S.DATA_S.bDataBuffer, 0, sizeof(uint32_t)+8);
 //	  u8Presence = 0;
