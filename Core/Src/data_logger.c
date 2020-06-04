@@ -61,12 +61,17 @@ void LoggerSaveState(LOGGER_STATE_E state)
 	memcpy(u8Buffer, &LoggerS, LOGGER_STORE_DATA_SIZE);
 	u8Buffer[LOGGER_STORE_DATA_SIZE-1] = 0;
 
-	HAL_FLASH_Unlock(); HAL_FLASH_OB_Unlock();
+	HAL_FLASH_Unlock();
 	if(u16Offset+LOGGER_STORE_DATA_SIZE >= PAGE_SIZE ||
 	   0 == u16Offset)
 	{
 		FlashErase(SYSTEM_PAGE);
 		u16Offset = 0;
+	}
+	else
+	{
+		/* there is enough place to save data in current page */
+		/* no needs to erase page */
 	}
     for(int i = 0; i<LOGGER_STORE_DATA_SIZE; i+=4)
     {
@@ -74,7 +79,7 @@ void LoggerSaveState(LOGGER_STATE_E state)
     	u16Offset += 4;
     }
 	memcpy(&test, (void*)(SYSTEM_PAGE+u16Offset), LOGGER_STORE_DATA_SIZE);
-	HAL_FLASH_Lock(); HAL_FLASH_OB_Lock();
+	HAL_FLASH_Lock();
 }
 
 void LoggerSaveData(uint8_t* pData, uint32_t size)
@@ -97,16 +102,18 @@ void LoggerSaveData(uint8_t* pData, uint32_t size)
 		uint32_t page_adr = FLASH_STORAGE + PAGE_SIZE*LoggerS._CurrentPage;
 		if(0xFF == define_page(page_adr))
 		{
-			for(int i = 0; i<size; i+=4)
-			{
-				FlashWrite(page_adr + i, 0);
-			}
+			/* no need to erase page */
 		}
 		else
 		{
 			FlashErase(page_adr);
 		}
 		LoggerS._LogSize = 0;
+	}
+	else
+	{
+		/* there is enough place to save data in current page */
+		/* execute code below to save data */
 	}
 	HAL_FLASH_Unlock();
 
@@ -117,6 +124,11 @@ void LoggerSaveData(uint8_t* pData, uint32_t size)
 		{
 			FlashWrite(curr_adr+i, *(uint32_t*)(pData+i));
 		}
+	}
+	else
+	{
+		/* size is invalid */
+		return;
 	}
 
 	LoggerS._LogSize += size;
@@ -160,3 +172,4 @@ static uint8_t define_page(uint32_t address)
 	HAL_FLASH_Unlock(); HAL_FLASH_OB_Unlock();
 	return pageState;
 }
+
